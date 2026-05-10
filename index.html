@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+  <meta name="theme-color" content="#1a1a2e" />
+  <title>Mimic — Imagem &amp; Ação</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <main id="app">
+    <!-- HOME SCREEN -->
+    <section id="screen-home" class="screen active">
+      <header class="hero">
+        <h1>Mimic</h1>
+        <p class="tagline">Imagem &amp; Ação para jogar com a galera</p>
+      </header>
+
+      <div class="settings">
+        <label class="setting">
+          <span>Tempo (segundos)</span>
+          <input id="timer-input" type="number" min="10" max="600" step="5" value="60" />
+        </label>
+
+        <fieldset class="setting categories">
+          <legend>Categorias</legend>
+          <label><input type="checkbox" data-cat="P" checked /> <span class="cat cat-P">P</span> Pessoa / Lugar / Animal</label>
+          <label><input type="checkbox" data-cat="O" checked /> <span class="cat cat-O">O</span> Objeto</label>
+          <label><input type="checkbox" data-cat="A" checked /> <span class="cat cat-A">A</span> Ação</label>
+          <label><input type="checkbox" data-cat="D" checked /> <span class="cat cat-D">D</span> Difícil</label>
+          <label><input type="checkbox" data-cat="L" checked /> <span class="cat cat-L">L</span> Lazer</label>
+          <label><input type="checkbox" data-cat="T" checked /> <span class="cat cat-T">T</span> Todos jogam</label>
+        </fieldset>
+      </div>
+
+      <button id="btn-draw" class="btn-primary big">Sortear carta</button>
+
+      <p class="hint">Apenas o jogador da vez deve olhar para a tela.</p>
+    </section>
+
+    <!-- REVEAL SCREEN: hidden behind a tap to keep secrecy -->
+    <section id="screen-reveal" class="screen">
+      <div class="reveal-cover">
+        <p class="cover-text">Cubra a tela e passe ao jogador da vez.</p>
+        <button id="btn-show-card" class="btn-primary">Mostrar carta</button>
+        <button id="btn-cancel" class="btn-link">Cancelar</button>
+      </div>
+
+      <div class="reveal-card hidden">
+        <div class="card">
+          <div class="card-header">
+            <span id="card-cat" class="cat">?</span>
+            <span id="card-cat-label" class="cat-label">—</span>
+            <span id="card-allplay" class="allplay hidden">Todos jogam!</span>
+          </div>
+          <h2 id="card-word">—</h2>
+        </div>
+        <button id="btn-start-timer" class="btn-primary big">Começar (iniciar tempo)</button>
+        <button id="btn-redraw" class="btn-link">Sortear outra</button>
+      </div>
+    </section>
+
+    <!-- TIMER SCREEN -->
+    <section id="screen-timer" class="screen">
+      <div class="timer-card">
+        <div class="card-header">
+          <span id="timer-cat" class="cat">?</span>
+          <span id="timer-cat-label" class="cat-label">—</span>
+          <span id="timer-allplay" class="allplay hidden">Todos jogam!</span>
+        </div>
+        <h2 id="timer-word">—</h2>
+        <div id="timer-display" class="timer-display">01:00</div>
+        <div class="timer-actions">
+          <button id="btn-stop" class="btn-secondary">Parar</button>
+          <button id="btn-finish" class="btn-primary">Acertou!</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- TIME UP SCREEN -->
+    <section id="screen-timeup" class="screen">
+      <div class="timeup">
+        <h2>Acabou o tempo!</h2>
+        <p>A palavra era:</p>
+        <h3 id="timeup-word">—</h3>
+        <button id="btn-back-home" class="btn-primary big">Voltar ao início</button>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <span id="word-count">0 palavras</span>
+  </footer>
+
+  <script src="words.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
