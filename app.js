@@ -26,7 +26,6 @@
     START: "#ecf0f1",
     FINISH: "#f1c40f",
   };
-  // Tiles whose category color is light enough to need dark text
   const CAT_TEXT_DARK = { O: true, A: true, START: true };
   const TEAM_COLORS = ["#e94560", "#4aa3df", "#f1c40f", "#2ecc71"];
 
@@ -147,6 +146,7 @@
   function setupCanvas() {
     const canvas = els.boardCanvas;
     const rect = canvas.getBoundingClientRect();
+    if (rect.width === 0 || rect.height === 0) return null;
     const dpr = window.devicePixelRatio || 1;
     canvas.width = Math.floor(rect.width * dpr);
     canvas.height = Math.floor(rect.height * dpr);
@@ -175,7 +175,9 @@
   }
 
   function drawBoard(highlightTeamPositions) {
-    const { ctx, w, h } = setupCanvas();
+    const setup = setupCanvas();
+    if (!setup) return;
+    const { ctx, w, h } = setup;
     ctx.clearRect(0, 0, w, h);
 
     const margin = 6;
@@ -188,17 +190,6 @@
     const startX = (w - gridW) / 2;
     const startY = (h - gridH) / 2;
 
-    ctx.strokeStyle = "rgba(255,255,255,0.08)";
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    state.spiralPath.forEach((p, idx) => {
-      const cx = startX + p.x * tileSize + tileSize / 2;
-      const cy = startY + p.y * tileSize + tileSize / 2;
-      if (idx === 0) ctx.moveTo(cx, cy);
-      else ctx.lineTo(cx, cy);
-    });
-    ctx.stroke();
-
     state.spiralPath.forEach((p, idx) => {
       const cat = state.boardTiles[idx];
       const x = startX + p.x * tileSize;
@@ -206,7 +197,37 @@
       drawTile(ctx, x, y, tileSize, cat, idx);
     });
 
+    drawPathArrows(ctx, startX, startY, tileSize);
     drawAllPawns(ctx, startX, startY, tileSize, highlightTeamPositions);
+  }
+
+  function drawPathArrows(ctx, startX, startY, tileSize) {
+    const aSize = Math.max(4, tileSize * 0.09);
+    for (let i = 0; i < state.spiralPath.length - 1; i++) {
+      const a = state.spiralPath[i];
+      const b = state.spiralPath[i + 1];
+      const ax = startX + a.x * tileSize + tileSize / 2;
+      const ay = startY + a.y * tileSize + tileSize / 2;
+      const bx = startX + b.x * tileSize + tileSize / 2;
+      const by = startY + b.y * tileSize + tileSize / 2;
+      const mx = (ax + bx) / 2;
+      const my = (ay + by) / 2;
+      const angle = Math.atan2(by - ay, bx - ax);
+      ctx.save();
+      ctx.translate(mx, my);
+      ctx.rotate(angle);
+      ctx.fillStyle = "rgba(255,255,255,0.95)";
+      ctx.strokeStyle = "rgba(0,0,0,0.45)";
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(aSize, 0);
+      ctx.lineTo(-aSize, aSize * 0.75);
+      ctx.lineTo(-aSize, -aSize * 0.75);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+      ctx.restore();
+    }
   }
 
   function drawTile(ctx, x, y, size, cat, idx) {
@@ -246,7 +267,8 @@
       ctx.fill();
     }
 
-    ctx.fillStyle = CAT_TEXT_DARK[cat] ? "#1a1a2e" : "#fff";
+    const darkText = CAT_TEXT_DARK[cat];
+    ctx.fillStyle = darkText ? "#1a1a2e" : "#fff";
     let text = cat;
     let fontSize = size * 0.42;
     if (cat === "START") {
@@ -261,6 +283,15 @@
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
     ctx.fillText(text, x + size / 2, y + size / 2);
+
+    // Sequence number (1-based) so the spiral order is unambiguous.
+    if (cat !== "START" && cat !== "FINISH") {
+      ctx.fillStyle = darkText ? "rgba(0,0,0,0.55)" : "rgba(255,255,255,0.7)";
+      ctx.font = `600 ${size * 0.18}px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif`;
+      ctx.textAlign = "left";
+      ctx.textBaseline = "top";
+      ctx.fillText(String(idx), x + pad + 3, y + pad + 2);
+    }
   }
 
   function drawAllPawns(ctx, startX, startY, tileSize, overridePositions) {
@@ -422,8 +453,6 @@
         setTimeout(handleWin, 350);
         return;
       }
-      // Turn ends after the roll. The next team takes over; the current team
-      // will play the new tile's category on their next turn.
       setTimeout(nextTurn, 450);
     });
   }
@@ -553,15 +582,12 @@
       show("home");
       return;
     }
-    // Correct answer earns the right to roll.
     showRollState();
     show("board");
     requestAnimationFrame(drawBoard);
   }
 
   function cancelFromCover() {
-    // Pre-timer cancel: go back to the board without ending the turn, so the
-    // team can re-draw a card from the same category.
     stopTimer();
     if (state.freePlay) {
       show("home");
@@ -572,8 +598,6 @@
   }
 
   function stopDuringTimer() {
-    // Stopping after the timer started counts as not getting the word:
-    // the turn ends and the pawn stays put.
     stopTimer();
     if (state.freePlay) {
       show("home");
@@ -674,6 +698,18 @@
     }
   });
 
+  // Redraw whenever the canvas's own box changes (e.g. when the board screen
+  // is shown after being display:none). This guarantees the pawn is painted
+  // even if the first drawBoard ran before layout had real dimensions.
+  if (typeof ResizeObserver !== "undefined") {
+    const ro = new ResizeObserver(() => {
+      if (screens.board.classList.contains("active") && state.spiralPath.length) {
+        drawBoard();
+      }
+    });
+    ro.observe(els.boardCanvas);
+  }
+
   // Persist settings
   const savedTimer = localStorage.getItem("mimic.timer");
   if (savedTimer) els.timerInput.value = savedTimer;
@@ -703,9 +739,6 @@
   });
 
   // ---------- Load words database ----------
-  // Words live in words/<cat>.json — one file per category, so a category
-  // can be edited without rewriting the whole list. Each entry is either
-  // ["word"] or ["word", 1] (1 = all-play).
 
   function loadWords() {
     els.wordCount.textContent = "carregando palavras…";
