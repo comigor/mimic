@@ -87,8 +87,8 @@
     teamCount: 2,
     teams: [],
     currentTeam: 0,
-    boardTiles: [],    // ["START", "P", "O", ..., "FINISH"]
-    spiralPath: [],    // [{x: col, y: row}, ...] same length as boardTiles
+    boardTiles: [],
+    spiralPath: [],
     currentCard: null,
     recent: [],
     intervalId: null,
@@ -97,7 +97,7 @@
     durationSec: 60,
     freePlay: false,
     forcedCategory: null,
-    highlightIdx: -1,  // tile to highlight (last landed)
+    highlightIdx: -1,
     animating: false,
   };
 
@@ -107,7 +107,7 @@
     const path = [];
     const visited = Array.from({ length: rows }, () => Array(cols).fill(false));
     let x = 0, y = 0;
-    let dx = 1, dy = 0; // start moving right
+    let dx = 1, dy = 0;
     const total = cols * rows;
     for (let i = 0; i < total; i++) {
       path.push({ x, y });
@@ -117,7 +117,6 @@
       const blocked =
         nx < 0 || nx >= cols || ny < 0 || ny >= rows || visited[ny][nx];
       if (blocked) {
-        // Rotate clockwise: (dx, dy) -> (-dy, dx)
         const tdx = -dy;
         const tdy = dx;
         dx = tdx;
@@ -189,7 +188,6 @@
     const startX = (w - gridW) / 2;
     const startY = (h - gridH) / 2;
 
-    // Faint connecting line between consecutive tiles to show the path
     ctx.strokeStyle = "rgba(255,255,255,0.08)";
     ctx.lineWidth = 2;
     ctx.beginPath();
@@ -201,7 +199,6 @@
     });
     ctx.stroke();
 
-    // Tiles
     state.spiralPath.forEach((p, idx) => {
       const cat = state.boardTiles[idx];
       const x = startX + p.x * tileSize;
@@ -209,7 +206,6 @@
       drawTile(ctx, x, y, tileSize, cat, idx);
     });
 
-    // Pawns
     drawAllPawns(ctx, startX, startY, tileSize, highlightTeamPositions);
   }
 
@@ -218,7 +214,6 @@
     const r = size * 0.15;
     const color = CAT_COLORS[cat] || "#555";
 
-    // Subtle drop shadow
     ctx.save();
     ctx.shadowColor = "rgba(0,0,0,0.35)";
     ctx.shadowBlur = 4;
@@ -228,7 +223,6 @@
     ctx.fill();
     ctx.restore();
 
-    // Highlight ring on last landed tile
     if (idx === state.highlightIdx) {
       ctx.strokeStyle = "rgba(255,255,255,0.95)";
       ctx.lineWidth = 3;
@@ -243,7 +237,6 @@
       ctx.stroke();
     }
 
-    // Finish tile: gradient overlay
     if (cat === "FINISH") {
       const g = ctx.createLinearGradient(x, y, x + size, y + size);
       g.addColorStop(0, "#f1c40f");
@@ -253,7 +246,6 @@
       ctx.fill();
     }
 
-    // Text
     ctx.fillStyle = CAT_TEXT_DARK[cat] ? "#1a1a2e" : "#fff";
     let text = cat;
     let fontSize = size * 0.42;
@@ -272,7 +264,6 @@
   }
 
   function drawAllPawns(ctx, startX, startY, tileSize, overridePositions) {
-    // Group teams by position so we can offset overlapping pawns.
     const positions = overridePositions || state.teams.map((t) => t.position);
     const byPos = {};
     positions.forEach((pos, i) => {
@@ -345,7 +336,7 @@
     setTimeout(tick, stepDelay);
   }
 
-  // ---------- Setup ----------
+  // ---------- Setup / turn lifecycle ----------
 
   function startGame() {
     state.freePlay = false;
@@ -357,11 +348,22 @@
     state.recent = [];
     state.highlightIdx = -1;
     buildBoard();
-    updateTurnBanner();
-    showRollState();
-    show("board");
-    // Two ticks so layout settles before measuring canvas
+    startTeamTurn();
     requestAnimationFrame(() => requestAnimationFrame(drawBoard));
+  }
+
+  function startTeamTurn() {
+    updateTurnBanner();
+    const team = state.teams[state.currentTeam];
+    if (team.position === 0) {
+      // INÍCIO: free roll to get on the board.
+      showRollState();
+    } else {
+      // Must play the current tile's category before rolling.
+      const cat = state.boardTiles[team.position];
+      showCardState(cat);
+    }
+    show("board");
   }
 
   function showRollState() {
@@ -420,7 +422,9 @@
         setTimeout(handleWin, 350);
         return;
       }
-      showCardState(cat);
+      // Turn ends after the roll. The next team takes over; the current team
+      // will play the new tile's category on their next turn.
+      setTimeout(nextTurn, 450);
     });
   }
 
@@ -545,10 +549,19 @@
 
   function finishEarly() {
     stopTimer();
-    afterRound();
+    if (state.freePlay) {
+      show("home");
+      return;
+    }
+    // Correct answer earns the right to roll.
+    showRollState();
+    show("board");
+    requestAnimationFrame(drawBoard);
   }
 
-  function cancelBackToBoardOrHome() {
+  function cancelFromCover() {
+    // Pre-timer cancel: go back to the board without ending the turn, so the
+    // team can re-draw a card from the same category.
     stopTimer();
     if (state.freePlay) {
       show("home");
@@ -556,6 +569,17 @@
       show("board");
       requestAnimationFrame(drawBoard);
     }
+  }
+
+  function stopDuringTimer() {
+    // Stopping after the timer started counts as not getting the word:
+    // the turn ends and the pawn stays put.
+    stopTimer();
+    if (state.freePlay) {
+      show("home");
+      return;
+    }
+    nextTurn();
   }
 
   function afterRound() {
@@ -569,9 +593,7 @@
   function nextTurn() {
     state.currentTeam = (state.currentTeam + 1) % state.teams.length;
     state.highlightIdx = -1;
-    updateTurnBanner();
-    showRollState();
-    show("board");
+    startTeamTurn();
     requestAnimationFrame(drawBoard);
   }
 
@@ -635,9 +657,9 @@
   els.btnRoll.addEventListener("click", rollDice);
   els.btnDrawCard.addEventListener("click", drawAndGoToReveal);
   els.btnShowCard.addEventListener("click", showCardOnReveal);
-  els.btnCancel.addEventListener("click", cancelBackToBoardOrHome);
+  els.btnCancel.addEventListener("click", cancelFromCover);
   els.btnStartTimer.addEventListener("click", startTimer);
-  els.btnStop.addEventListener("click", cancelBackToBoardOrHome);
+  els.btnStop.addEventListener("click", stopDuringTimer);
   els.btnFinish.addEventListener("click", finishEarly);
   els.btnBackHome.addEventListener("click", afterRound);
   els.btnQuitGame.addEventListener("click", () => {
@@ -680,7 +702,46 @@
     });
   });
 
-  els.wordCount.textContent = (window.MIMIC_WORDS || []).length + " palavras";
+  // ---------- Load words database ----------
+  // Words live in words/<cat>.json — one file per category, so a category
+  // can be edited without rewriting the whole list. Each entry is either
+  // ["word"] or ["word", 1] (1 = all-play).
 
+  function loadWords() {
+    els.wordCount.textContent = "carregando palavras…";
+    const cats = ["P", "O", "A", "D", "L", "T"];
+    const seen = new Set();
+    const out = [];
+    return Promise.all(
+      cats.map((cat) =>
+        fetch("words/" + cat.toLowerCase() + ".json", { cache: "no-cache" })
+          .then((r) => {
+            if (!r.ok) throw new Error("HTTP " + r.status + " loading " + cat);
+            return r.json();
+          })
+          .then((arr) => {
+            for (const entry of arr) {
+              const word = entry[0];
+              if (!word || String(word).trim() === "") continue;
+              const allPlay = cat === "T" ? true : Boolean(entry[1]);
+              const key = String(word).toLowerCase() + "|" + cat;
+              if (seen.has(key)) continue;
+              seen.add(key);
+              out.push({ word: word, category: cat, allPlay: allPlay });
+            }
+          })
+      )
+    )
+      .then(() => {
+        window.MIMIC_WORDS = out;
+        els.wordCount.textContent = out.length + " palavras";
+      })
+      .catch((e) => {
+        console.error("Failed to load words", e);
+        els.wordCount.textContent = "Erro ao carregar palavras";
+      });
+  }
+
+  loadWords();
   show("home");
 })();
