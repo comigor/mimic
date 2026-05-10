@@ -10,9 +10,25 @@
     T: "Todos jogam",
   };
 
-  // Spiral-ish track: start tile, repeating P-O-A-D-L-T sequence, finish tile.
+  // Rectangular spiral board: 6×6 grid = 36 tiles total.
+  // Tile 0 = INÍCIO, tile 35 = FIM, tiles 1-34 cycle through P-O-A-D-L-T.
   const TILE_SEQUENCE = ["P", "O", "A", "D", "L", "T"];
-  const BOARD_LENGTH = 36; // category tiles between INÍCIO and FIM
+  const BOARD_COLS = 6;
+  const BOARD_ROWS = 6;
+
+  const CAT_COLORS = {
+    P: "#4aa3df",
+    O: "#f1c40f",
+    A: "#2ecc71",
+    D: "#9b59b6",
+    L: "#e67e22",
+    T: "#e94560",
+    START: "#ecf0f1",
+    FINISH: "#f1c40f",
+  };
+  // Tiles whose category color is light enough to need dark text
+  const CAT_TEXT_DARK = { O: true, A: true, START: true };
+  const TEAM_COLORS = ["#e94560", "#4aa3df", "#f1c40f", "#2ecc71"];
 
   const screens = {
     home: document.getElementById("screen-home"),
@@ -58,7 +74,7 @@
     turnPawn: document.getElementById("turn-pawn"),
     turnLabel: document.getElementById("turn-label"),
     turnBanner: document.getElementById("turn-banner"),
-    boardTrack: document.getElementById("board-track"),
+    boardCanvas: document.getElementById("board-canvas"),
     dice: document.getElementById("dice"),
     boardRollState: document.getElementById("board-roll-state"),
     boardCardState: document.getElementById("board-card-state"),
@@ -71,7 +87,8 @@
     teamCount: 2,
     teams: [],
     currentTeam: 0,
-    boardTiles: [],
+    boardTiles: [],    // ["START", "P", "O", ..., "FINISH"]
+    spiralPath: [],    // [{x: col, y: row}, ...] same length as boardTiles
     currentCard: null,
     recent: [],
     intervalId: null,
@@ -80,68 +97,252 @@
     durationSec: 60,
     freePlay: false,
     forcedCategory: null,
+    highlightIdx: -1,  // tile to highlight (last landed)
+    animating: false,
   };
 
-  // ---------- Board ----------
+  // ---------- Board geometry ----------
+
+  function generateSpiralPath(cols, rows) {
+    const path = [];
+    const visited = Array.from({ length: rows }, () => Array(cols).fill(false));
+    let x = 0, y = 0;
+    let dx = 1, dy = 0; // start moving right
+    const total = cols * rows;
+    for (let i = 0; i < total; i++) {
+      path.push({ x, y });
+      visited[y][x] = true;
+      if (i === total - 1) break;
+      let nx = x + dx, ny = y + dy;
+      const blocked =
+        nx < 0 || nx >= cols || ny < 0 || ny >= rows || visited[ny][nx];
+      if (blocked) {
+        // Rotate clockwise: (dx, dy) -> (-dy, dx)
+        const tdx = -dy;
+        const tdy = dx;
+        dx = tdx;
+        dy = tdy;
+        nx = x + dx;
+        ny = y + dy;
+      }
+      x = nx;
+      y = ny;
+    }
+    return path;
+  }
 
   function buildBoard() {
-    const tiles = ["START"];
-    for (let i = 0; i < BOARD_LENGTH; i++) {
-      tiles.push(TILE_SEQUENCE[i % TILE_SEQUENCE.length]);
+    state.spiralPath = generateSpiralPath(BOARD_COLS, BOARD_ROWS);
+    const total = state.spiralPath.length;
+    const tiles = new Array(total);
+    tiles[0] = "START";
+    tiles[total - 1] = "FINISH";
+    for (let i = 1; i < total - 1; i++) {
+      tiles[i] = TILE_SEQUENCE[(i - 1) % TILE_SEQUENCE.length];
     }
-    tiles.push("FINISH");
     state.boardTiles = tiles;
   }
 
-  function renderBoard() {
-    els.boardTrack.innerHTML = "";
-    state.boardTiles.forEach((cat, idx) => {
-      const tile = document.createElement("div");
-      tile.className = "tile";
-      if (cat === "START") {
-        tile.classList.add("tile-start");
-        tile.textContent = "INÍCIO";
-      } else if (cat === "FINISH") {
-        tile.classList.add("tile-finish");
-        tile.textContent = "FIM";
-      } else {
-        tile.classList.add("tile-" + cat);
-        tile.textContent = cat;
-      }
-      tile.dataset.idx = idx;
-      const pawnsBox = document.createElement("div");
-      pawnsBox.className = "pawns";
-      pawnsBox.dataset.idx = idx;
-      tile.appendChild(pawnsBox);
-      els.boardTrack.appendChild(tile);
-    });
-    redrawPawns();
+  // ---------- Canvas rendering ----------
+
+  function setupCanvas() {
+    const canvas = els.boardCanvas;
+    const rect = canvas.getBoundingClientRect();
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width = Math.floor(rect.width * dpr);
+    canvas.height = Math.floor(rect.height * dpr);
+    const ctx = canvas.getContext("2d");
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    return { ctx, w: rect.width, h: rect.height };
   }
 
-  function redrawPawns() {
-    els.boardTrack.querySelectorAll(".pawns").forEach((b) => (b.innerHTML = ""));
-    state.teams.forEach((t, i) => {
-      const box = els.boardTrack.querySelector(`.pawns[data-idx="${t.position}"]`);
-      if (!box) return;
-      const p = document.createElement("span");
-      p.className = "pawn pawn-" + (i + 1);
-      box.appendChild(p);
-    });
-  }
-
-  function scrollToCurrentTeam() {
-    const t = state.teams[state.currentTeam];
-    if (!t) return;
-    const tile = els.boardTrack.querySelector(`.tile[data-idx="${t.position}"]`);
-    if (tile && tile.scrollIntoView) {
-      tile.scrollIntoView({ behavior: "smooth", inline: "center", block: "nearest" });
+  function drawRoundRect(ctx, x, y, w, h, r) {
+    if (ctx.roundRect) {
+      ctx.beginPath();
+      ctx.roundRect(x, y, w, h, r);
+      return;
     }
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.lineTo(x + w - r, y);
+    ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+    ctx.lineTo(x + w, y + h - r);
+    ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+    ctx.lineTo(x + r, y + h);
+    ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+    ctx.lineTo(x, y + r);
+    ctx.quadraticCurveTo(x, y, x + r, y);
+    ctx.closePath();
   }
 
-  function updateTurnBanner() {
-    const i = state.currentTeam;
-    els.turnPawn.className = "pawn pawn-" + (i + 1);
-    els.turnLabel.textContent = `Vez do Time ${i + 1}`;
+  function drawBoard(highlightTeamPositions) {
+    const { ctx, w, h } = setupCanvas();
+    ctx.clearRect(0, 0, w, h);
+
+    const margin = 6;
+    const tileSize = Math.min(
+      (w - margin * 2) / BOARD_COLS,
+      (h - margin * 2) / BOARD_ROWS
+    );
+    const gridW = tileSize * BOARD_COLS;
+    const gridH = tileSize * BOARD_ROWS;
+    const startX = (w - gridW) / 2;
+    const startY = (h - gridH) / 2;
+
+    // Faint connecting line between consecutive tiles to show the path
+    ctx.strokeStyle = "rgba(255,255,255,0.08)";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    state.spiralPath.forEach((p, idx) => {
+      const cx = startX + p.x * tileSize + tileSize / 2;
+      const cy = startY + p.y * tileSize + tileSize / 2;
+      if (idx === 0) ctx.moveTo(cx, cy);
+      else ctx.lineTo(cx, cy);
+    });
+    ctx.stroke();
+
+    // Tiles
+    state.spiralPath.forEach((p, idx) => {
+      const cat = state.boardTiles[idx];
+      const x = startX + p.x * tileSize;
+      const y = startY + p.y * tileSize;
+      drawTile(ctx, x, y, tileSize, cat, idx);
+    });
+
+    // Pawns
+    drawAllPawns(ctx, startX, startY, tileSize, highlightTeamPositions);
+  }
+
+  function drawTile(ctx, x, y, size, cat, idx) {
+    const pad = Math.max(2, size * 0.05);
+    const r = size * 0.15;
+    const color = CAT_COLORS[cat] || "#555";
+
+    // Subtle drop shadow
+    ctx.save();
+    ctx.shadowColor = "rgba(0,0,0,0.35)";
+    ctx.shadowBlur = 4;
+    ctx.shadowOffsetY = 2;
+    ctx.fillStyle = color;
+    drawRoundRect(ctx, x + pad, y + pad, size - pad * 2, size - pad * 2, r);
+    ctx.fill();
+    ctx.restore();
+
+    // Highlight ring on last landed tile
+    if (idx === state.highlightIdx) {
+      ctx.strokeStyle = "rgba(255,255,255,0.95)";
+      ctx.lineWidth = 3;
+      drawRoundRect(
+        ctx,
+        x + pad - 1,
+        y + pad - 1,
+        size - pad * 2 + 2,
+        size - pad * 2 + 2,
+        r + 1
+      );
+      ctx.stroke();
+    }
+
+    // Finish tile: gradient overlay
+    if (cat === "FINISH") {
+      const g = ctx.createLinearGradient(x, y, x + size, y + size);
+      g.addColorStop(0, "#f1c40f");
+      g.addColorStop(1, "#e94560");
+      ctx.fillStyle = g;
+      drawRoundRect(ctx, x + pad, y + pad, size - pad * 2, size - pad * 2, r);
+      ctx.fill();
+    }
+
+    // Text
+    ctx.fillStyle = CAT_TEXT_DARK[cat] ? "#1a1a2e" : "#fff";
+    let text = cat;
+    let fontSize = size * 0.42;
+    if (cat === "START") {
+      text = "INÍCIO";
+      fontSize = size * 0.18;
+    } else if (cat === "FINISH") {
+      text = "FIM";
+      fontSize = size * 0.26;
+      ctx.fillStyle = "#fff";
+    }
+    ctx.font = `800 ${fontSize}px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(text, x + size / 2, y + size / 2);
+  }
+
+  function drawAllPawns(ctx, startX, startY, tileSize, overridePositions) {
+    // Group teams by position so we can offset overlapping pawns.
+    const positions = overridePositions || state.teams.map((t) => t.position);
+    const byPos = {};
+    positions.forEach((pos, i) => {
+      if (!byPos[pos]) byPos[pos] = [];
+      byPos[pos].push(i);
+    });
+
+    Object.keys(byPos).forEach((posIdxStr) => {
+      const posIdx = parseInt(posIdxStr, 10);
+      const teamIndices = byPos[posIdx];
+      const p = state.spiralPath[posIdx];
+      if (!p) return;
+      const cx = startX + p.x * tileSize + tileSize / 2;
+      const cy = startY + p.y * tileSize + tileSize / 2;
+      const pr = Math.max(7, tileSize * 0.18);
+
+      teamIndices.forEach((teamIdx, i) => {
+        let px = cx, py = cy;
+        if (teamIndices.length > 1) {
+          const angle = (i / teamIndices.length) * Math.PI * 2 - Math.PI / 2;
+          const d = pr * 0.85;
+          px = cx + Math.cos(angle) * d;
+          py = cy + Math.sin(angle) * d;
+        }
+        drawPawn(ctx, px, py, pr, TEAM_COLORS[teamIdx % TEAM_COLORS.length]);
+      });
+    });
+  }
+
+  function drawPawn(ctx, cx, cy, r, color) {
+    ctx.save();
+    ctx.shadowColor = "rgba(0,0,0,0.45)";
+    ctx.shadowBlur = 3;
+    ctx.shadowOffsetY = 2;
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+    ctx.strokeStyle = "rgba(255,255,255,0.85)";
+    ctx.lineWidth = Math.max(1.5, r * 0.18);
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+
+  // ---------- Animation ----------
+
+  function animatePawnMove(fromIdx, toIdx, doneCb) {
+    const team = state.teams[state.currentTeam];
+    state.animating = true;
+    let stepIdx = fromIdx;
+    const stepDelay = 160;
+
+    const tick = () => {
+      if (stepIdx >= toIdx) {
+        team.position = toIdx;
+        state.highlightIdx = toIdx;
+        state.animating = false;
+        drawBoard();
+        doneCb();
+        return;
+      }
+      stepIdx++;
+      team.position = stepIdx;
+      state.highlightIdx = stepIdx;
+      drawBoard();
+      setTimeout(tick, stepDelay);
+    };
+    setTimeout(tick, stepDelay);
   }
 
   // ---------- Setup ----------
@@ -154,12 +355,13 @@
     }
     state.currentTeam = 0;
     state.recent = [];
+    state.highlightIdx = -1;
     buildBoard();
-    renderBoard();
     updateTurnBanner();
     showRollState();
     show("board");
-    setTimeout(scrollToCurrentTeam, 50);
+    // Two ticks so layout settles before measuring canvas
+    requestAnimationFrame(() => requestAnimationFrame(drawBoard));
   }
 
   function showRollState() {
@@ -180,10 +382,17 @@
     state.forcedCategory = cat;
   }
 
+  function updateTurnBanner() {
+    const i = state.currentTeam;
+    els.turnPawn.className = "pawn pawn-" + (i + 1);
+    els.turnLabel.textContent = `Vez do Time ${i + 1}`;
+  }
+
   // ---------- Dice ----------
 
   function rollDice() {
     primeAudio();
+    if (state.animating) return;
     els.btnRoll.disabled = true;
     els.dice.classList.add("rolling");
     let ticks = 10;
@@ -204,16 +413,15 @@
     const team = state.teams[state.currentTeam];
     const lastIdx = state.boardTiles.length - 1;
     const target = Math.min(lastIdx, team.position + n);
-    team.position = target;
-    redrawPawns();
-    scrollToCurrentTeam();
-
-    const cat = state.boardTiles[target];
-    if (cat === "FINISH") {
-      setTimeout(handleWin, 400);
-      return;
-    }
-    showCardState(cat);
+    const from = team.position;
+    animatePawnMove(from, target, () => {
+      const cat = state.boardTiles[target];
+      if (cat === "FINISH") {
+        setTimeout(handleWin, 350);
+        return;
+      }
+      showCardState(cat);
+    });
   }
 
   function handleWin() {
@@ -262,8 +470,6 @@
     elAllPlay.classList.toggle("hidden", !card.allPlay || card.category === "T");
     elWord.textContent = card.word;
   }
-
-  // ---------- Reveal flow ----------
 
   function drawAndGoToReveal() {
     const card = pickCard();
@@ -344,8 +550,12 @@
 
   function cancelBackToBoardOrHome() {
     stopTimer();
-    if (state.freePlay) show("home");
-    else show("board");
+    if (state.freePlay) {
+      show("home");
+    } else {
+      show("board");
+      requestAnimationFrame(drawBoard);
+    }
   }
 
   function afterRound() {
@@ -358,10 +568,11 @@
 
   function nextTurn() {
     state.currentTeam = (state.currentTeam + 1) % state.teams.length;
+    state.highlightIdx = -1;
     updateTurnBanner();
     showRollState();
     show("board");
-    setTimeout(scrollToCurrentTeam, 50);
+    requestAnimationFrame(drawBoard);
   }
 
   // ---------- Audio ----------
@@ -434,6 +645,12 @@
     show("home");
   });
   els.btnNewGame.addEventListener("click", () => show("home"));
+
+  window.addEventListener("resize", () => {
+    if (screens.board.classList.contains("active")) {
+      requestAnimationFrame(drawBoard);
+    }
+  });
 
   // Persist settings
   const savedTimer = localStorage.getItem("mimic.timer");
