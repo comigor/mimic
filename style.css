@@ -201,65 +201,20 @@ body {
 .pawn-3 { background: var(--team-3); }
 .pawn-4 { background: var(--team-4); }
 
-.board-track-wrap {
-  overflow-x: auto;
-  padding: 0.75rem 0.5rem 1.5rem;
+.board-canvas-wrap {
+  padding: 0.75rem;
   background: rgba(0,0,0,0.2);
-  border-radius: 12px;
+  border-radius: 14px;
   border: 1px solid rgba(255,255,255,0.06);
-  -webkit-overflow-scrolling: touch;
-}
-.board-track {
   display: flex;
-  gap: 4px;
-  padding: 0.25rem;
-  min-width: max-content;
-}
-.tile {
-  flex: 0 0 auto;
-  width: 2.6rem;
-  height: 2.6rem;
-  display: flex;
-  align-items: center;
   justify-content: center;
-  font-weight: 800;
-  font-size: 1rem;
-  border-radius: 8px;
-  color: #fff;
-  position: relative;
-  scroll-margin: 5rem;
 }
-.tile.tile-P { background: var(--cat-P); }
-.tile.tile-O { background: var(--cat-O); color: #1a1a2e; }
-.tile.tile-A { background: var(--cat-A); color: #1a1a2e; }
-.tile.tile-D { background: var(--cat-D); }
-.tile.tile-L { background: var(--cat-L); }
-.tile.tile-T { background: var(--cat-T); }
-.tile.tile-start, .tile.tile-finish {
-  width: 3.5rem;
-  font-size: 0.7rem;
-  letter-spacing: 0.05em;
-}
-.tile.tile-start { background: #ffffff; color: #1a1a2e; }
-.tile.tile-finish {
-  background: linear-gradient(45deg, #f1c40f, var(--accent));
-  color: #fff;
-  box-shadow: 0 0 12px rgba(241, 196, 15, 0.5);
-}
-
-.tile .pawns {
-  position: absolute;
-  bottom: -0.85rem;
-  left: 50%;
-  transform: translateX(-50%);
-  display: flex;
-  gap: 2px;
-  height: 0;
-}
-.tile .pawns .pawn {
-  width: 0.85rem;
-  height: 0.85rem;
-  border-width: 1px;
+.board-canvas {
+  width: 100%;
+  max-width: 420px;
+  aspect-ratio: 1;
+  display: block;
+  touch-action: manipulation;
 }
 
 /* Dice */
