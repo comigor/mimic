@@ -332,8 +332,6 @@
       const p = state.spiralPath[posIdx];
       if (!p) return;
 
-      // Use the actual *visible* tile center (after asymmetric padding) so
-      // the pawn sits on the tile rather than in the empty gap beside it.
       const slotX = startX + p.x * tileSize;
       const slotY = startY + p.y * tileSize;
       const pad = tilePadding(posIdx, p, tileSize);
@@ -357,7 +355,6 @@
   }
 
   function drawPawn(ctx, cx, cy, r, color) {
-    // White halo + drop shadow for contrast on any background.
     ctx.save();
     ctx.shadowColor = "rgba(0,0,0,0.55)";
     ctx.shadowBlur = 4;
@@ -368,13 +365,11 @@
     ctx.fill();
     ctx.restore();
 
-    // Coloured body.
     ctx.fillStyle = color;
     ctx.beginPath();
     ctx.arc(cx, cy, r, 0, Math.PI * 2);
     ctx.fill();
 
-    // Dark outline so the pawn is also visible on light tiles.
     ctx.strokeStyle = "rgba(0,0,0,0.55)";
     ctx.lineWidth = Math.max(1.5, r * 0.16);
     ctx.beginPath();
@@ -415,7 +410,27 @@
       drawBoard();
       requestAnimationFrame(drawBoard);
     });
+    // Mobile browsers (notably iOS Safari) sometimes don't have layout for
+    // the canvas ready in the same frame as the screen change, and can also
+    // drop the canvas pixel buffer during long idle waits. A few delayed
+    // redraws cover these cases without being expensive.
+    setTimeout(drawBoard, 120);
+    setTimeout(drawBoard, 500);
   }
+
+  // Safety net: while the board screen is shown, repaint it occasionally so
+  // a dropped/cleared canvas buffer (mostly an iOS Safari thing) self-heals.
+  // No-op on non-board screens, so it only runs while the user is actually
+  // looking at the board.
+  setInterval(() => {
+    if (
+      screens.board.classList.contains("active") &&
+      state.spiralPath.length &&
+      !state.animating
+    ) {
+      drawBoard();
+    }
+  }, 1500);
 
   // ---------- Setup / turn lifecycle ----------
 
@@ -754,6 +769,24 @@
     });
     ro.observe(els.boardCanvas);
   }
+
+  // Repaint when the tab/page comes back into view. iOS Safari in particular
+  // can wipe the canvas buffer when the app is backgrounded.
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden && screens.board.classList.contains("active")) {
+      redrawBoardSoon();
+    }
+  });
+  window.addEventListener("pageshow", () => {
+    if (screens.board.classList.contains("active")) {
+      redrawBoardSoon();
+    }
+  });
+  window.addEventListener("focus", () => {
+    if (screens.board.classList.contains("active")) {
+      redrawBoardSoon();
+    }
+  });
 
   // Persist settings
   const savedTimer = localStorage.getItem("mimic.timer");
