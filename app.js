@@ -131,6 +131,15 @@
 
   function buildBoard() {
     state.spiralPath = generateSpiralPath(BOARD_COLS, BOARD_ROWS);
+    // Reverse lookup: grid (row, col) → spiral index. Used to detect when a
+    // tile's grid neighbor is or isn't its immediate predecessor/successor on
+    // the path, so we can leave a wider gap on the disconnected sides.
+    state.gridIdx = Array.from({ length: BOARD_ROWS }, () =>
+      Array(BOARD_COLS).fill(-1)
+    );
+    state.spiralPath.forEach((p, i) => {
+      state.gridIdx[p.y][p.x] = i;
+    });
     const total = state.spiralPath.length;
     const tiles = new Array(total);
     tiles[0] = "START";
@@ -139,6 +148,27 @@
       tiles[i] = TILE_SEQUENCE[(i - 1) % TILE_SEQUENCE.length];
     }
     state.boardTiles = tiles;
+  }
+
+  function tilePadding(idx, pos, slotSize) {
+    const minPad = Math.max(2, slotSize * 0.05);
+    const widePad = Math.max(minPad + 4, slotSize * 0.22);
+
+    function isConsecutiveNeighbor(dx, dy) {
+      const nx = pos.x + dx;
+      const ny = pos.y + dy;
+      if (nx < 0 || nx >= BOARD_COLS || ny < 0 || ny >= BOARD_ROWS) return true;
+      const ni = state.gridIdx[ny][nx];
+      if (ni === -1) return true;
+      return Math.abs(ni - idx) === 1;
+    }
+
+    return {
+      top: isConsecutiveNeighbor(0, -1) ? minPad : widePad,
+      bottom: isConsecutiveNeighbor(0, 1) ? minPad : widePad,
+      left: isConsecutiveNeighbor(-1, 0) ? minPad : widePad,
+      right: isConsecutiveNeighbor(1, 0) ? minPad : widePad,
+    };
   }
 
   // ---------- Canvas rendering ----------
@@ -231,8 +261,13 @@
   }
 
   function drawTile(ctx, x, y, size, cat, idx) {
-    const pad = Math.max(2, size * 0.05);
-    const r = size * 0.15;
+    const pos = state.spiralPath[idx];
+    const pad = tilePadding(idx, pos, size);
+    const tileX = x + pad.left;
+    const tileY = y + pad.top;
+    const tileW = size - pad.left - pad.right;
+    const tileH = size - pad.top - pad.bottom;
+    const r = Math.min(tileW, tileH) * 0.18;
     const color = CAT_COLORS[cat] || "#555";
 
     ctx.save();
@@ -240,57 +275,49 @@
     ctx.shadowBlur = 4;
     ctx.shadowOffsetY = 2;
     ctx.fillStyle = color;
-    drawRoundRect(ctx, x + pad, y + pad, size - pad * 2, size - pad * 2, r);
+    drawRoundRect(ctx, tileX, tileY, tileW, tileH, r);
     ctx.fill();
     ctx.restore();
 
     if (idx === state.highlightIdx) {
       ctx.strokeStyle = "rgba(255,255,255,0.95)";
       ctx.lineWidth = 3;
-      drawRoundRect(
-        ctx,
-        x + pad - 1,
-        y + pad - 1,
-        size - pad * 2 + 2,
-        size - pad * 2 + 2,
-        r + 1
-      );
+      drawRoundRect(ctx, tileX - 1, tileY - 1, tileW + 2, tileH + 2, r + 1);
       ctx.stroke();
     }
 
     if (cat === "FINISH") {
-      const g = ctx.createLinearGradient(x, y, x + size, y + size);
+      const g = ctx.createLinearGradient(tileX, tileY, tileX + tileW, tileY + tileH);
       g.addColorStop(0, "#f1c40f");
       g.addColorStop(1, "#e94560");
       ctx.fillStyle = g;
-      drawRoundRect(ctx, x + pad, y + pad, size - pad * 2, size - pad * 2, r);
+      drawRoundRect(ctx, tileX, tileY, tileW, tileH, r);
       ctx.fill();
     }
 
     const darkText = CAT_TEXT_DARK[cat];
     ctx.fillStyle = darkText ? "#1a1a2e" : "#fff";
     let text = cat;
-    let fontSize = size * 0.42;
+    let fontSize = Math.min(tileW, tileH) * 0.5;
     if (cat === "START") {
       text = "INÍCIO";
-      fontSize = size * 0.18;
+      fontSize = Math.min(tileW, tileH) * 0.22;
     } else if (cat === "FINISH") {
       text = "FIM";
-      fontSize = size * 0.26;
+      fontSize = Math.min(tileW, tileH) * 0.32;
       ctx.fillStyle = "#fff";
     }
     ctx.font = `800 ${fontSize}px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif`;
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-    ctx.fillText(text, x + size / 2, y + size / 2);
+    ctx.fillText(text, tileX + tileW / 2, tileY + tileH / 2);
 
-    // Sequence number (1-based) so the spiral order is unambiguous.
     if (cat !== "START" && cat !== "FINISH") {
       ctx.fillStyle = darkText ? "rgba(0,0,0,0.55)" : "rgba(255,255,255,0.7)";
-      ctx.font = `600 ${size * 0.18}px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif`;
+      ctx.font = `600 ${Math.min(tileW, tileH) * 0.22}px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif`;
       ctx.textAlign = "left";
       ctx.textBaseline = "top";
-      ctx.fillText(String(idx), x + pad + 3, y + pad + 2);
+      ctx.fillText(String(idx), tileX + 3, tileY + 2);
     }
   }
 
@@ -325,17 +352,26 @@
   }
 
   function drawPawn(ctx, cx, cy, r, color) {
+    // White halo + drop shadow for contrast on any background.
     ctx.save();
-    ctx.shadowColor = "rgba(0,0,0,0.45)";
-    ctx.shadowBlur = 3;
+    ctx.shadowColor = "rgba(0,0,0,0.55)";
+    ctx.shadowBlur = 4;
     ctx.shadowOffsetY = 2;
+    ctx.fillStyle = "#ffffff";
+    ctx.beginPath();
+    ctx.arc(cx, cy, r + 1.5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+
+    // Coloured body.
     ctx.fillStyle = color;
     ctx.beginPath();
     ctx.arc(cx, cy, r, 0, Math.PI * 2);
     ctx.fill();
-    ctx.restore();
-    ctx.strokeStyle = "rgba(255,255,255,0.85)";
-    ctx.lineWidth = Math.max(1.5, r * 0.18);
+
+    // Dark outline so the pawn is also visible on light tiles.
+    ctx.strokeStyle = "rgba(0,0,0,0.55)";
+    ctx.lineWidth = Math.max(1.5, r * 0.16);
     ctx.beginPath();
     ctx.arc(cx, cy, r, 0, Math.PI * 2);
     ctx.stroke();
@@ -346,6 +382,7 @@
   function animatePawnMove(fromIdx, toIdx, doneCb) {
     const team = state.teams[state.currentTeam];
     state.animating = true;
+    drawBoard(); // make sure the starting position is visible before stepping
     let stepIdx = fromIdx;
     const stepDelay = 160;
 
@@ -367,6 +404,18 @@
     setTimeout(tick, stepDelay);
   }
 
+  // Redraw the board reliably even when we just switched to the board screen
+  // and CSS layout might not have settled yet. We try synchronously, then on
+  // the next two animation frames; whichever one has real canvas dimensions
+  // will succeed (the others bail out via setupCanvas's zero-size guard).
+  function redrawBoardSoon() {
+    drawBoard();
+    requestAnimationFrame(() => {
+      drawBoard();
+      requestAnimationFrame(drawBoard);
+    });
+  }
+
   // ---------- Setup / turn lifecycle ----------
 
   function startGame() {
@@ -380,7 +429,7 @@
     state.highlightIdx = -1;
     buildBoard();
     startTeamTurn();
-    requestAnimationFrame(() => requestAnimationFrame(drawBoard));
+    redrawBoardSoon();
   }
 
   function startTeamTurn() {
@@ -584,7 +633,7 @@
     }
     showRollState();
     show("board");
-    requestAnimationFrame(drawBoard);
+    redrawBoardSoon();
   }
 
   function cancelFromCover() {
@@ -593,7 +642,7 @@
       show("home");
     } else {
       show("board");
-      requestAnimationFrame(drawBoard);
+      redrawBoardSoon();
     }
   }
 
@@ -618,7 +667,7 @@
     state.currentTeam = (state.currentTeam + 1) % state.teams.length;
     state.highlightIdx = -1;
     startTeamTurn();
-    requestAnimationFrame(drawBoard);
+    redrawBoardSoon();
   }
 
   // ---------- Audio ----------
@@ -698,9 +747,6 @@
     }
   });
 
-  // Redraw whenever the canvas's own box changes (e.g. when the board screen
-  // is shown after being display:none). This guarantees the pawn is painted
-  // even if the first drawBoard ran before layout had real dimensions.
   if (typeof ResizeObserver !== "undefined") {
     const ro = new ResizeObserver(() => {
       if (screens.board.classList.contains("active") && state.spiralPath.length) {
