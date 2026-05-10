@@ -131,9 +131,6 @@
 
   function buildBoard() {
     state.spiralPath = generateSpiralPath(BOARD_COLS, BOARD_ROWS);
-    // Reverse lookup: grid (row, col) → spiral index. Used to detect when a
-    // tile's grid neighbor is or isn't its immediate predecessor/successor on
-    // the path, so we can leave a wider gap on the disconnected sides.
     state.gridIdx = Array.from({ length: BOARD_ROWS }, () =>
       Array(BOARD_COLS).fill(-1)
     );
@@ -334,9 +331,17 @@
       const teamIndices = byPos[posIdx];
       const p = state.spiralPath[posIdx];
       if (!p) return;
-      const cx = startX + p.x * tileSize + tileSize / 2;
-      const cy = startY + p.y * tileSize + tileSize / 2;
-      const pr = Math.max(7, tileSize * 0.18);
+
+      // Use the actual *visible* tile center (after asymmetric padding) so
+      // the pawn sits on the tile rather than in the empty gap beside it.
+      const slotX = startX + p.x * tileSize;
+      const slotY = startY + p.y * tileSize;
+      const pad = tilePadding(posIdx, p, tileSize);
+      const tileW = tileSize - pad.left - pad.right;
+      const tileH = tileSize - pad.top - pad.bottom;
+      const cx = slotX + pad.left + tileW / 2;
+      const cy = slotY + pad.top + tileH / 2;
+      const pr = Math.max(8, Math.min(tileW, tileH) * 0.24);
 
       teamIndices.forEach((teamIdx, i) => {
         let px = cx, py = cy;
@@ -382,7 +387,7 @@
   function animatePawnMove(fromIdx, toIdx, doneCb) {
     const team = state.teams[state.currentTeam];
     state.animating = true;
-    drawBoard(); // make sure the starting position is visible before stepping
+    drawBoard();
     let stepIdx = fromIdx;
     const stepDelay = 160;
 
@@ -404,10 +409,6 @@
     setTimeout(tick, stepDelay);
   }
 
-  // Redraw the board reliably even when we just switched to the board screen
-  // and CSS layout might not have settled yet. We try synchronously, then on
-  // the next two animation frames; whichever one has real canvas dimensions
-  // will succeed (the others bail out via setupCanvas's zero-size guard).
   function redrawBoardSoon() {
     drawBoard();
     requestAnimationFrame(() => {
@@ -436,10 +437,8 @@
     updateTurnBanner();
     const team = state.teams[state.currentTeam];
     if (team.position === 0) {
-      // INÍCIO: free roll to get on the board.
       showRollState();
     } else {
-      // Must play the current tile's category before rolling.
       const cat = state.boardTiles[team.position];
       showCardState(cat);
     }
