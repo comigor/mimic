@@ -11,7 +11,9 @@
   };
 
   // Rectangular spiral board: 6×6 grid = 36 tiles total.
-  // Tile 0 = INÍCIO, tile 35 = FIM, tiles 1-34 cycle through P-O-A-D-L-T.
+  // Tile 0 is a "T" (Todos) starting tile, tile 35 = FIM, tiles 1-34 cycle
+  // through P-O-A-D-L-T. Every team must play the card matching their
+  // current tile's category before they get to roll and move.
   const TILE_SEQUENCE = ["P", "O", "A", "D", "L", "T"];
   const BOARD_COLS = 6;
   const BOARD_ROWS = 6;
@@ -23,10 +25,9 @@
     D: "#9b59b6",
     L: "#e67e22",
     T: "#e94560",
-    START: "#ecf0f1",
     FINISH: "#f1c40f",
   };
-  const CAT_TEXT_DARK = { O: true, A: true, START: true };
+  const CAT_TEXT_DARK = { O: true, A: true };
   const TEAM_COLORS = ["#e94560", "#4aa3df", "#f1c40f", "#2ecc71"];
 
   const screens = {
@@ -51,7 +52,6 @@
     btnFinish: document.getElementById("btn-finish"),
     btnBackHome: document.getElementById("btn-back-home"),
     btnQuitGame: document.getElementById("btn-quit-game"),
-    btnRoll: document.getElementById("btn-roll"),
     btnDrawCard: document.getElementById("btn-draw-card"),
     btnNewGame: document.getElementById("btn-new-game"),
 
@@ -139,7 +139,9 @@
     });
     const total = state.spiralPath.length;
     const tiles = new Array(total);
-    tiles[0] = "START";
+    // First tile is a Todos (T) — every team plays a T card before their
+    // first roll. Last tile is the finish.
+    tiles[0] = "T";
     tiles[total - 1] = "FINISH";
     for (let i = 1; i < total - 1; i++) {
       tiles[i] = TILE_SEQUENCE[(i - 1) % TILE_SEQUENCE.length];
@@ -296,10 +298,7 @@
     ctx.fillStyle = darkText ? "#1a1a2e" : "#fff";
     let text = cat;
     let fontSize = Math.min(tileW, tileH) * 0.5;
-    if (cat === "START") {
-      text = "INÍCIO";
-      fontSize = Math.min(tileW, tileH) * 0.22;
-    } else if (cat === "FINISH") {
+    if (cat === "FINISH") {
       text = "FIM";
       fontSize = Math.min(tileW, tileH) * 0.32;
       ctx.fillStyle = "#fff";
@@ -309,12 +308,13 @@
     ctx.textBaseline = "middle";
     ctx.fillText(text, tileX + tileW / 2, tileY + tileH / 2);
 
-    if (cat !== "START" && cat !== "FINISH") {
+    if (cat !== "FINISH") {
+      // 1-based sequence number in the corner so the spiral order is obvious.
       ctx.fillStyle = darkText ? "rgba(0,0,0,0.55)" : "rgba(255,255,255,0.7)";
       ctx.font = `600 ${Math.min(tileW, tileH) * 0.22}px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif`;
       ctx.textAlign = "left";
       ctx.textBaseline = "top";
-      ctx.fillText(String(idx), tileX + 3, tileY + 2);
+      ctx.fillText(String(idx + 1), tileX + 3, tileY + 2);
     }
   }
 
@@ -451,21 +451,17 @@
   function startTeamTurn() {
     updateTurnBanner();
     const team = state.teams[state.currentTeam];
-    if (team.position === 0) {
-      showRollState();
-    } else {
-      const cat = state.boardTiles[team.position];
-      showCardState(cat);
-    }
+    const cat = state.boardTiles[team.position];
+    showCardState(cat);
     show("board");
   }
 
   function showRollState() {
+    // Dice is shown only briefly between "Acertou!" and the pawn animation.
     els.boardRollState.classList.remove("hidden");
     els.boardCardState.classList.add("hidden");
     els.dice.textContent = "🎲";
     els.dice.classList.remove("rolling");
-    els.btnRoll.disabled = false;
     state.forcedCategory = null;
   }
 
@@ -489,7 +485,6 @@
   function rollDice() {
     primeAudio();
     if (state.animating) return;
-    els.btnRoll.disabled = true;
     els.dice.classList.add("rolling");
     let ticks = 10;
     const interval = setInterval(() => {
@@ -645,9 +640,12 @@
       show("home");
       return;
     }
+    // Correct answer auto-rolls the dice and moves the pawn — the player
+    // doesn't have to tap anything else for the move to happen.
     showRollState();
     show("board");
     redrawBoardSoon();
+    setTimeout(rollDice, 400);
   }
 
   function cancelFromCover() {
@@ -741,7 +739,6 @@
     state.forcedCategory = null;
     drawAndGoToReveal();
   });
-  els.btnRoll.addEventListener("click", rollDice);
   els.btnDrawCard.addEventListener("click", drawAndGoToReveal);
   els.btnShowCard.addEventListener("click", showCardOnReveal);
   els.btnCancel.addEventListener("click", cancelFromCover);
