@@ -9,7 +9,7 @@
 </head>
 <body>
   <main id="app">
-    <!-- HOME SCREEN -->
+    <!-- HOME / SETUP SCREEN -->
     <section id="screen-home" class="screen active">
       <header class="hero">
         <h1>Mimic</h1>
@@ -18,12 +18,21 @@
 
       <div class="settings">
         <label class="setting">
-          <span>Tempo (segundos)</span>
+          <span>Times</span>
+          <div class="teams-selector">
+            <button type="button" class="team-count-btn active" data-count="2">2</button>
+            <button type="button" class="team-count-btn" data-count="3">3</button>
+            <button type="button" class="team-count-btn" data-count="4">4</button>
+          </div>
+        </label>
+
+        <label class="setting">
+          <span>Tempo por jogada (segundos)</span>
           <input id="timer-input" type="number" min="10" max="600" step="5" value="60" />
         </label>
 
         <fieldset class="setting categories">
-          <legend>Categorias</legend>
+          <legend>Categorias ativas</legend>
           <label><input type="checkbox" data-cat="P" checked /> <span class="cat cat-P">P</span> Pessoa / Lugar / Animal</label>
           <label><input type="checkbox" data-cat="O" checked /> <span class="cat cat-O">O</span> Objeto</label>
           <label><input type="checkbox" data-cat="A" checked /> <span class="cat cat-A">A</span> Ação</label>
@@ -33,12 +42,41 @@
         </fieldset>
       </div>
 
-      <button id="btn-draw" class="btn-primary big">Sortear carta</button>
+      <button id="btn-start-game" class="btn-primary big">Iniciar partida</button>
+      <button id="btn-free-play" class="btn-link">Modo livre (sem tabuleiro)</button>
 
       <p class="hint">Apenas o jogador da vez deve olhar para a tela.</p>
     </section>
 
-    <!-- REVEAL SCREEN: hidden behind a tap to keep secrecy -->
+    <!-- BOARD SCREEN -->
+    <section id="screen-board" class="screen">
+      <div class="turn-banner" id="turn-banner">
+        <span class="pawn" id="turn-pawn"></span>
+        <span id="turn-label">Vez do Time 1</span>
+      </div>
+
+      <div class="board-track-wrap">
+        <div id="board-track" class="board-track"></div>
+      </div>
+
+      <div class="board-actions" id="board-roll-state">
+        <div id="dice" class="dice">🎲</div>
+        <button id="btn-roll" class="btn-primary big">Rolar dado</button>
+      </div>
+
+      <div class="board-actions hidden" id="board-card-state">
+        <p class="landed-msg">
+          Caiu em
+          <span id="landed-cat-badge" class="cat">?</span>
+          <span id="landed-cat-name">—</span>
+        </p>
+        <button id="btn-draw-card" class="btn-primary big">Sortear carta</button>
+      </div>
+
+      <button id="btn-quit-game" class="btn-link">Sair da partida</button>
+    </section>
+
+    <!-- REVEAL SCREEN -->
     <section id="screen-reveal" class="screen">
       <div class="reveal-cover">
         <p class="cover-text">Cubra a tela e passe ao jogador da vez.</p>
@@ -56,7 +94,6 @@
           <h2 id="card-word">—</h2>
         </div>
         <button id="btn-start-timer" class="btn-primary big">Começar (iniciar tempo)</button>
-        <button id="btn-redraw" class="btn-link">Sortear outra</button>
       </div>
     </section>
 
@@ -83,7 +120,16 @@
         <h2>Acabou o tempo!</h2>
         <p>A palavra era:</p>
         <h3 id="timeup-word">—</h3>
-        <button id="btn-back-home" class="btn-primary big">Voltar ao início</button>
+        <button id="btn-back-home" class="btn-primary big">Continuar</button>
+      </div>
+    </section>
+
+    <!-- WIN SCREEN -->
+    <section id="screen-win" class="screen">
+      <div class="timeup">
+        <h2>🏆 Vitória!</h2>
+        <p>O <span id="win-team-label">Time</span> chegou ao FIM!</p>
+        <button id="btn-new-game" class="btn-primary big">Novo jogo</button>
       </div>
     </section>
   </main>
