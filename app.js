@@ -36,6 +36,7 @@
     reveal: document.getElementById("screen-reveal"),
     timer: document.getElementById("screen-timer"),
     timeup: document.getElementById("screen-timeup"),
+    allplay: document.getElementById("screen-allplay-pick"),
     win: document.getElementById("screen-win"),
   };
 
@@ -80,6 +81,8 @@
     landedCatBadge: document.getElementById("landed-cat-badge"),
     landedCatName: document.getElementById("landed-cat-name"),
     winTeamLabel: document.getElementById("win-team-label"),
+    allplayTeamButtons: document.getElementById("allplay-team-buttons"),
+    btnAllplayNobody: document.getElementById("btn-allplay-nobody"),
   };
 
   const state = {
@@ -98,6 +101,7 @@
     forcedCategory: null,
     highlightIdx: -1,
     animating: false,
+    allPlayOriginalTurn: null,
   };
 
   // ---------- Board geometry ----------
@@ -443,6 +447,7 @@
     state.currentTeam = 0;
     state.recent = [];
     state.highlightIdx = -1;
+    state.allPlayOriginalTurn = null;
     buildBoard();
     startTeamTurn();
     redrawBoardSoon();
@@ -634,10 +639,18 @@
     show("timeup");
   }
 
+  function isAllPlayCard(card) {
+    return !!card && (card.allPlay === true || card.category === "T");
+  }
+
   function finishEarly() {
     stopTimer();
     if (state.freePlay) {
       show("home");
+      return;
+    }
+    if (isAllPlayCard(state.currentCard)) {
+      showAllPlayPicker();
       return;
     }
     // Correct answer auto-rolls the dice and moves the pawn — the player
@@ -646,6 +659,46 @@
     show("board");
     redrawBoardSoon();
     setTimeout(rollDice, 400);
+  }
+
+  function showAllPlayPicker() {
+    const container = els.allplayTeamButtons;
+    container.innerHTML = "";
+    state.teams.forEach((_, idx) => {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "btn-secondary allplay-team-btn";
+      const pawn = document.createElement("span");
+      pawn.className = "pawn pawn-" + (idx + 1);
+      const label = document.createElement("span");
+      label.textContent = "Time " + (idx + 1);
+      btn.appendChild(pawn);
+      btn.appendChild(label);
+      btn.addEventListener("click", () => acceptAllPlayWinner(idx));
+      container.appendChild(btn);
+    });
+    show("allplay");
+  }
+
+  function acceptAllPlayWinner(winnerIdx) {
+    // Remember whose turn it actually was so the rotation continues from
+    // there after the winning team has moved.
+    state.allPlayOriginalTurn = state.currentTeam;
+    state.currentTeam = winnerIdx;
+    updateTurnBanner();
+    showRollState();
+    show("board");
+    redrawBoardSoon();
+    setTimeout(rollDice, 400);
+  }
+
+  function allPlayNobody() {
+    // Picker dismissed without a winner: nobody advances, turn passes
+    // normally from the originator (state.currentTeam is still them).
+    state.allPlayOriginalTurn = null;
+    show("board");
+    redrawBoardSoon();
+    nextTurn();
   }
 
   function cancelFromCover() {
@@ -676,7 +729,13 @@
   }
 
   function nextTurn() {
-    state.currentTeam = (state.currentTeam + 1) % state.teams.length;
+    // If an all-play just resolved, restart the rotation from the original
+    // turn-holder, not from the winning team.
+    const base = state.allPlayOriginalTurn != null
+      ? state.allPlayOriginalTurn
+      : state.currentTeam;
+    state.allPlayOriginalTurn = null;
+    state.currentTeam = (base + 1) % state.teams.length;
     state.highlightIdx = -1;
     startTeamTurn();
     redrawBoardSoon();
@@ -746,6 +805,7 @@
   els.btnStop.addEventListener("click", stopDuringTimer);
   els.btnFinish.addEventListener("click", finishEarly);
   els.btnBackHome.addEventListener("click", afterRound);
+  els.btnAllplayNobody.addEventListener("click", allPlayNobody);
   els.btnQuitGame.addEventListener("click", () => {
     stopTimer();
     show("home");

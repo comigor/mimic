@@ -11,8 +11,9 @@ Versão estática (web) do clássico **Imagem & Ação** para jogar com a galera
 5. Ele toca em **Mostrar carta** para ver a palavra (só ele deve olhar!).
 6. Ao tocar em **Começar**, o cronômetro inicia.
 7. **Acertou!** para o tempo, rola o dado automaticamente e avança o peão. **Parar** passa a vez sem rolar.
-8. Quando o tempo acaba, um alarme toca e a palavra é revelada.
-9. O primeiro time a chegar na casa **FIM** (canto central do tabuleiro espiral 6×6) vence.
+8. Em cartas de **Todos jogam** (categoria T ou marcadas com `allPlay`), ao tocar em **Acertou!** o app pergunta *qual* time acertou — selecione e só esse time avança. Toque em **Ninguém acertou** se preferir passar a vez.
+9. Quando o tempo acaba, um alarme toca e a palavra é revelada.
+10. O primeiro time a chegar na casa **FIM** (canto central do tabuleiro espiral 6×6) vence.
 
 ### Categorias
 

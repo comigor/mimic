@@ -318,6 +318,25 @@ body {
 .timeup h2 { font-size: 2.2rem; margin: 0 0 0.5rem; color: var(--accent); }
 .timeup h3 { font-size: 2rem; margin: 0.25rem 0 1.5rem; }
 
+.allplay-pick { text-align: center; padding: 1.5rem 1rem; }
+.allplay-pick h2 { font-size: 2rem; margin: 0 0 0.5rem; color: var(--accent); }
+.allplay-pick p { color: var(--muted); margin: 0 0 1.25rem; }
+
+.allplay-team-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  margin-bottom: 1rem;
+}
+.allplay-team-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.6rem;
+  font-size: 1.15rem;
+}
+.allplay-team-btn .pawn { width: 1.4rem; height: 1.4rem; }
+
 .footer {
   text-align: center;
   padding: 0.5rem;
