@@ -19,7 +19,8 @@ Mimic is a static, single-page web implementation of the Brazilian charades game
 ## Key Directories
 
 - `/` — all source. `index.html` is the entry; `app.js` is the only script tag (`index.html:140`); `style.css` is the only stylesheet.
-- `words/` — six JSON files, one per category letter (`p.json`, `o.json`, `a.json`, `d.json`, `l.json`, `t.json`). Each is a flat array of `[word]` or `[word, 1]` entries; the trailing `1` flags `allPlay: true` (every team plays simultaneously). Files in the `t.json` (Todos) bucket are implicitly `allPlay`. ~360–370 entries per file (~2200 total).
+- `words/` — six JSON files, one per category letter (`p.json`, `o.json`, `a.json`, `d.json`, `l.json`, `t.json`). Each is a flat array of `[word]` or `[word, 1]` entries; the trailing `1` flags `allPlay: true` (every team plays simultaneously). Files in the `t.json` (Todos) bucket are implicitly `allPlay`. ~370–455 entries per file (~2400 total).
+- `scripts/curate_words.py` — idempotent curation tool. Edit the `REMOVALS` and `ADDITIONS` dicts at the top, then `python3 scripts/curate_words.py` to apply. The script deduplicates within each file by accent-stripped lower-case, skips additions already present, and pretty-prints one entry per line.
 - `.github/workflows/deploy.yml` — GitHub Pages deploy.
 
 ## Development Commands
